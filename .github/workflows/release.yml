@@ -1,0 +1,64 @@
+# Pushing an x.y.z tag builds a release and attaches the three files Obsidian
+# needs.
+#
+#   npm version patch && git push --follow-tags
+#
+# Obsidian installs a plugin from the release assets, not from the repository.
+# A missing asset means nobody can install it, which is why this is CI's job
+# rather than a manual step.
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+  # attest-build-provenance needs these two to sign a verifiable provenance claim
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # The tag has to match manifest.json, or Obsidian cannot find the release
+      - name: Verify tag matches manifest version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          MANIFEST=$(node -p "require('./manifest.json').version")
+          echo "tag=$TAG manifest=$MANIFEST"
+          if [ "$TAG" != "$MANIFEST" ]; then
+            echo "::error::tag ($TAG) does not match manifest.json version ($MANIFEST)"
+            exit 1
+          fi
+
+      # Lets users run `gh attestation verify` to confirm the assets came from this repo
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/main.js
+            dist/styles.css
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            dist/main.js dist/manifest.json dist/styles.css

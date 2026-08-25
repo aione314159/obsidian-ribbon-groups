@@ -1,0 +1,357 @@
+/* Ribbon Groups
+ *
+ * Two halves: the groups drawn on the ribbon, and the drag lists in the
+ * settings pane. Colours always come from Obsidian's theme variables, so
+ * switching themes needs no change here.
+ *
+ * Spacing comes from four tokens and nothing else. Every rule below picks one
+ * of them; a rule with its own hand-picked number is a rule that drifts out of
+ * step the next time a neighbour is adjusted.
+ */
+
+/* --- Groups on the ribbon --- */
+
+.ribbon-groups-group {
+  --rg-gap-xs: 2px;
+  --rg-gap-sm: 4px;
+  --rg-gap-md: 6px;
+  --rg-gap-lg: 8px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Compact mode trades breathing room for fitting more buttons in a short window */
+.ribbon-groups-group.is-compact {
+  --rg-gap-xs: 0px;
+  --rg-gap-sm: 2px;
+  --rg-gap-md: 2px;
+  --rg-gap-lg: 4px;
+}
+
+.ribbon-groups-group.is-group.has-color {
+  margin: var(--rg-gap-xs) var(--rg-gap-sm);
+  padding: var(--rg-gap-xs) 0 var(--rg-gap-sm);
+  border-radius: var(--radius-m, 6px);
+  background: var(--rg-color);
+}
+
+/* An uncoloured group gets a hairline instead, taking no extra space */
+.ribbon-groups-group.is-group:not(.has-color) + .ribbon-groups-group.is-group:not(.has-color) {
+  margin-top: var(--rg-gap-sm);
+  padding-top: var(--rg-gap-sm);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.ribbon-groups-items {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+/* The ribbon is about 42px wide: a title fits two or three characters, then clips */
+.ribbon-groups-title {
+  max-width: 100%;
+  padding: 0 var(--rg-gap-xs) var(--rg-gap-xs);
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ribbon-groups-title:hover {
+  color: var(--text-normal);
+}
+
+/* The group icon says in the available width what a title has to cut short */
+.ribbon-groups-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: var(--rg-gap-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.ribbon-groups-icon:hover {
+  color: var(--text-normal);
+}
+
+.ribbon-groups-icon .svg-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.ribbon-groups-group.is-collapsed .ribbon-groups-items {
+  display: none;
+}
+
+/* A collapsed group needs a mark, or the blank space reads as nothing being there */
+.ribbon-groups-group.is-collapsed .ribbon-groups-title::after {
+  content: ' ▸';
+  opacity: 0.7;
+}
+
+.ribbon-groups-group.is-collapsed .ribbon-groups-icon {
+  opacity: 0.6;
+}
+
+/* --- Settings pane --- */
+
+/*
+ * Turn off the background, radius and border that Obsidian's .setting-item
+ * carries (by redefining its variables rather than fighting it with selectors).
+ *
+ * Measured on Obsidian 1.13.7 over CDP: .setting-item reads all three of these
+ * (app.css: `.setting-item { border-radius: var(--setting-items-radius);
+ *   background-color: var(--setting-items-background); ...
+ *   border: var(--setting-items-border-width) solid var(--setting-items-border-color); }`).
+ * Left alone, every row inside a card grows its own grey rounded box, nesting a
+ * card inside a card: the two radii do not line up and the corners look as if
+ * they poke out of the container.
+ */
+.ribbon-groups-settings {
+  --rg-gap-xs: 4px;
+  --rg-gap-sm: 8px;
+  --rg-gap-md: 12px;
+  --rg-gap-lg: 16px;
+
+  --setting-items-background: transparent;
+  --setting-items-radius: 0;
+  --setting-items-border-width: 0;
+}
+
+/*
+ * One value drives the spacing between rows inside a card. Let each row set its
+ * own margin and changing one puts it out of line with the rest.
+ */
+.ribbon-groups-settings .ribbon-groups-card {
+  margin-bottom: var(--rg-gap-lg);
+  padding: var(--rg-gap-md);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 6px);
+  background: var(--background-secondary);
+}
+
+.ribbon-groups-card > * + * {
+  margin-top: var(--rg-gap-sm);
+}
+
+/*
+ * padding and margin-bottom on .setting-item are literal values rather than
+ * setting-items variables, so they cannot be redefined and have to be
+ * overridden. The selector deliberately stacks three classes to reach
+ * `.ribbon-groups-settings .ribbon-groups-card .setting-item`: Obsidian 1.13.7
+ * ships `.vertical-tab-content .setting-item { padding: 8px 0px; }` with two
+ * classes, and at equal specificity load order decides — which it used to win,
+ * meaning the older two-class version of this rule never actually applied.
+ * Three classes wins regardless of order. Without the margin-bottom reset it
+ * would stack with the margin-top above and double the gap.
+ */
+.ribbon-groups-settings .ribbon-groups-card .setting-item {
+  padding: var(--rg-gap-sm) var(--rg-gap-md);
+  margin-bottom: 0;
+}
+
+/*
+ * The last row of a card is the delete button and nothing else. Clearing its
+ * padding lets the button sit flush with the card's inner edge; the background
+ * and border are already off via the variables above.
+ */
+.ribbon-groups-card > .setting-item:last-child {
+  padding: 0;
+}
+
+.ribbon-groups-card.is-dragging {
+  opacity: 0.5;
+}
+
+.ribbon-groups-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--rg-gap-sm);
+}
+
+.ribbon-groups-title-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.ribbon-groups-handle,
+.ribbon-groups-item-handle {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  cursor: grab;
+  user-select: none;
+  /* Claims the gesture before the pane can read it as a scroll on a touch screen */
+  touch-action: none;
+}
+
+.ribbon-groups-handle:active,
+.ribbon-groups-item-handle:active {
+  cursor: grabbing;
+}
+
+/*
+ * Where the dragged row will land. Drawn inside the list rather than as an
+ * outline around it, because "between these two" is what the drop resolves to.
+ */
+.ribbon-groups-drop-line {
+  height: 2px;
+  margin: calc(var(--rg-gap-xs) * -1) 0;
+  border-radius: 1px;
+  background: var(--interactive-accent);
+  pointer-events: none;
+}
+
+/* Eight swatches do not fit one row in a narrow pane */
+.ribbon-groups-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--rg-gap-xs);
+}
+
+.ribbon-groups-swatch {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+/* The "none" swatch has no fill, so a slash marks it apart from a white theme */
+.ribbon-groups-swatch.is-none {
+  background: linear-gradient(
+    to bottom right,
+    transparent calc(50% - 1px),
+    var(--text-faint) calc(50% - 1px),
+    var(--text-faint) calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
+}
+
+.ribbon-groups-swatch.is-current {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px var(--interactive-accent);
+}
+
+.ribbon-groups-icon-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--text-muted);
+}
+
+.ribbon-groups-field-warning:not(:empty) {
+  margin-top: var(--rg-gap-xs);
+  color: var(--text-error);
+  font-size: var(--font-ui-smaller);
+}
+
+/* Spacing inside a card comes from .ribbon-groups-card > * + *; no margin here */
+.ribbon-groups-slot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rg-gap-xs);
+  min-height: 40px;
+  padding: var(--rg-gap-sm);
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: var(--radius-m, 6px);
+}
+
+/* The ungrouped list sits outside any card, so it spaces itself off the heading */
+.ribbon-groups-slot.is-loose {
+  margin-top: var(--rg-gap-sm);
+}
+
+.ribbon-groups-search {
+  padding-top: 0;
+}
+
+.ribbon-groups-search .search-input-container {
+  width: 100%;
+}
+
+.ribbon-groups-item {
+  display: flex;
+  align-items: center;
+  gap: var(--rg-gap-sm);
+  padding: var(--rg-gap-xs) var(--rg-gap-sm);
+  border-radius: var(--radius-s, 4px);
+  background: var(--background-primary);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.ribbon-groups-item.is-dragging {
+  opacity: 0.5;
+}
+
+.ribbon-groups-item-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ribbon-groups-empty {
+  padding: var(--rg-gap-xs) var(--rg-gap-sm);
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  text-align: center;
+}
+
+.ribbon-groups-backup-box {
+  width: 100%;
+  margin-top: var(--rg-gap-sm);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  resize: vertical;
+}
+
+.ribbon-groups-warning {
+  margin: 0 0 var(--rg-gap-md);
+  color: var(--text-error);
+}
+
+.ribbon-groups-diagnostics {
+  max-height: 220px;
+  overflow: auto;
+  padding: var(--rg-gap-sm);
+  border-radius: var(--radius-m, 6px);
+  background: var(--code-background);
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.ribbon-groups-details {
+  margin-top: var(--rg-gap-lg);
+  color: var(--text-muted);
+}
+
+.ribbon-groups-details summary {
+  cursor: pointer;
+}
+
+/*
+ * An absolute path is long: monospace, and allowed to break anywhere so it
+ * cannot widen the settings pane.
+ */
+.ribbon-groups-path {
+  margin-top: var(--rg-gap-xs);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  word-break: break-all;
+  user-select: text;
+}

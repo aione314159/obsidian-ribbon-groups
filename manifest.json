@@ -1,0 +1,10 @@
+{
+  "id": "ribbon-groups",
+  "name": "Open Ribbon Groups",
+  "version": "1.1.0",
+  "minAppVersion": "1.8.7",
+  "description": "Group the buttons in the left ribbon into labeled, color-coded sections, and reorder them by dragging.",
+  "author": "aione",
+  "authorUrl": "https://github.com/aione314159",
+  "isDesktopOnly": false
+}

@@ -1,0 +1,36 @@
+node_modules/
+dist/
+.DS_Store
+
+# Local development only; this repository is public
+.open_bull/
+.obsidian/
+CLAUDE.md
+cli/
+docs/DECISIONS_PENDING.md
+
+# --- Sensitive and local-only paths. See .claude/CLAUDE.md for the rule. ---
+# Runtime plugin settings, written by the app. Holds whatever the user typed in,
+# including API tokens and service-account keys.
+data.json
+
+# Credentials and key material. Never committed, in any form.
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.ppk
+*.crt
+id_rsa*
+
+# Local AI-assistant instructions and internal task notes.
+.claude/
+TODO.md
+
+# Internal AI-generated reports. They map this machine's paths and attack surface.
+docs_ai/
+
+# Build output and OS cruft.
+main.js
+*.vsix
