@@ -36,3 +36,6 @@ main.js
 *.vsix
 # Backup directory the ob-obsidian-kit audit tool writes; never committed.
 .kit-backup-*/
+# Alternative build config left by the ob-obsidian-kit scaffold; this project
+# builds with vite (vite.config.ts) and its entry does not exist here.
+esbuild.config.mjs
