@@ -130,7 +130,7 @@ Settings → Open Ribbon Groups:
 3. Drag buttons from the "Ungrouped" list below into it
 4. Use the `⠿` handle on the left to reorder groups
 
-![The plugin's settings tab, with the drag handle, color swatches and button list annotated](./docs/images/settings.png)
+![The plugin's settings tab, annotated: hide ungrouped buttons, the group on/off toggle, the color swatches, the move-to-group dropdown and the delete button](./docs/images/settings.en.png)
 
 Changes apply immediately; there is nothing to save.
 
