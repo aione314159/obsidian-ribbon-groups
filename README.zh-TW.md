@@ -28,7 +28,7 @@
 
 ---
 
-![左側 ribbon 分成兩個彩色分組，下方是未分組區](./docs/images/ribbon.png)
+![左側 ribbon 的分組後與拖曳中兩種狀態，標出分組標題、一個分組、未分組按鈕與拖曳](./docs/images/ribbon.zh-TW.png)
 
 ## 系統需求
 

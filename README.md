@@ -25,7 +25,7 @@ separated by color.
 
 ---
 
-![The left ribbon with two colored groups and an ungrouped section](./docs/images/ribbon.png)
+![The left ribbon, grouped and mid-drag, annotated: the group title, a group, the ungrouped buttons, and dragging a button to another group](./docs/images/ribbon.en.png)
 
 ## Requirements
 
