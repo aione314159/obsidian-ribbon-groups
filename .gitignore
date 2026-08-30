@@ -34,3 +34,5 @@ docs_ai/
 # Build output and OS cruft.
 main.js
 *.vsix
+# Backup directory the ob-obsidian-kit audit tool writes; never committed.
+.kit-backup-*/

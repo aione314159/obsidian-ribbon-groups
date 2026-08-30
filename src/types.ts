@@ -38,6 +38,15 @@ export interface RibbonGroup {
   showTitle: boolean;
   /** Collapsed groups keep their title row and hide their buttons. */
   collapsed: boolean;
+  /**
+   * Whether the group is drawn on the ribbon at all.
+   *
+   * Different from `collapsed`: a collapsed group still shows its title, so the
+   * user can see it is there and click to open it. A hidden group leaves no
+   * trace on the ribbon, and the only way back is the settings pane. Its
+   * `itemIds` are kept either way — hiding is about the ribbon, not the data.
+   */
+  hidden: boolean;
   /** Button ids in the group; the order here is the order on screen. */
   itemIds: string[];
 }
@@ -55,6 +64,14 @@ export interface RibbonGroupsSettings {
    */
   keepMissing: boolean;
   /**
+   * Whether to hide every button that is not in a group.
+   *
+   * The point of grouping is to decide what belongs on the ribbon. Once a vault
+   * has forty buttons and eight of them matter, the ungrouped block is noise;
+   * this turns it off without having to build a group for the rest.
+   */
+  hideUngrouped: boolean;
+  /**
    * Tighter vertical spacing on the ribbon.
    *
    * With many groups the default padding pushes the last buttons off the
@@ -63,14 +80,22 @@ export interface RibbonGroupsSettings {
   compact: boolean;
 }
 
-/** One rendered section of the ribbon. */
+/**
+ * One rendered section of the ribbon.
+ *
+ * A hidden block is still returned, and still holds its buttons. Dropping it
+ * here would leave those buttons behind in the ribbon container with nothing
+ * owning them, so they are rendered into a wrapper that is `display: none` and
+ * travel back out the same way every other button does on restore.
+ */
 export type LayoutBlock =
-  | { kind: 'group'; group: RibbonGroup; itemIds: string[] }
-  | { kind: 'ungrouped'; itemIds: string[] };
+  | { kind: 'group'; group: RibbonGroup; itemIds: string[]; hidden: boolean }
+  | { kind: 'ungrouped'; itemIds: string[]; hidden: boolean };
 
 export const DEFAULT_SETTINGS: RibbonGroupsSettings = {
   groups: [],
   ungrouped: 'bottom',
   keepMissing: true,
+  hideUngrouped: false,
   compact: false,
 };

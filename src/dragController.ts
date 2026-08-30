@@ -245,8 +245,9 @@ export class PointerDragController {
   }
 }
 
-/** Nearest scrollable ancestor, used for edge auto-scrolling. */
-function findScroller(el: HTMLElement): HTMLElement | null {
+/** Nearest scrollable ancestor, used for edge auto-scrolling and for keeping
+ * the settings pane's scroll position across a rebuild. */
+export function findScroller(el: HTMLElement): HTMLElement | null {
   let node: HTMLElement | null = el.parentElement;
   while (node) {
     const overflow = getComputedStyle(node).overflowY;

@@ -176,3 +176,24 @@ function buildItems(
 function labelOf(el: HTMLElement): string {
   return el.getAttribute('aria-label') ?? el.getAttribute('title') ?? '';
 }
+
+/**
+ * Open this plugin's own page in Obsidian's settings window.
+ *
+ * `app.setting` is not part of the public API — `Plugin` can add a settings tab
+ * but cannot ask for it to be shown. The two calls are guarded rather than
+ * assumed: a release that renames either one should leave the context menu item
+ * doing nothing, not throw out of the click handler and take the menu with it.
+ *
+ * Returns whether the page was actually opened, so the caller can tell the user
+ * instead of leaving them looking at a menu item that quietly does nothing.
+ */
+export function openPluginSettings(app: App, pluginId: string): boolean {
+  const setting = (app as unknown as { setting?: { open?: () => void; openTabById?: (id: string) => void } })
+    .setting;
+  if (typeof setting?.open !== 'function' || typeof setting.openTabById !== 'function') return false;
+
+  setting.open();
+  setting.openTabById(pluginId);
+  return true;
+}

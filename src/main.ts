@@ -9,9 +9,10 @@
 
 import './styles.css';
 
-import { Plugin } from 'obsidian';
-import { normalizeSettings, setAllCollapsed, updateGroup } from './groupLayout';
+import { Notice, Plugin } from 'obsidian';
+import { moveItem, normalizeSettings, setAllCollapsed, updateGroup } from './groupLayout';
 import { t } from './i18n';
+import { openPluginSettings } from './ribbonDom';
 import { RibbonManager } from './ribbonManager';
 import { RibbonGroupsSettingTab } from './settingsTab';
 import { DEFAULT_SETTINGS, type RibbonGroupsSettings } from './types';
@@ -29,7 +30,12 @@ export default class RibbonGroupsPlugin extends Plugin {
     this.manager = new RibbonManager(
       this.app,
       () => this.settings,
-      (groupId, collapsed) => void this.setCollapsed(groupId, collapsed)
+      {
+        setCollapsed: (groupId, collapsed) => void this.patchGroup(groupId, { collapsed }),
+        setHidden: (groupId, hidden) => void this.patchGroup(groupId, { hidden }),
+        moveItem: (itemId, groupId, index) => void this.moveItem(itemId, groupId, index),
+        openSettings: () => this.openSettings(),
+      }
     );
 
     this.addSettingTab(new RibbonGroupsSettingTab(this.app, this));
@@ -75,8 +81,24 @@ export default class RibbonGroupsPlugin extends Plugin {
     return `${Date.now().toString(36)}-${this.seed}`;
   }
 
-  private async setCollapsed(groupId: string, collapsed: boolean): Promise<void> {
-    this.settings = updateGroup(this.settings, groupId, { collapsed });
+  /**
+   * Open this plugin's settings page, from the ribbon's context menu.
+   *
+   * Failure is reported rather than swallowed: `app.setting` is private, so a
+   * release that moves it would otherwise turn the menu item into a click that
+   * does nothing at all.
+   */
+  private openSettings(): void {
+    if (!openPluginSettings(this.app, this.manifest.id)) new Notice(t.settingsOpenFailed);
+  }
+
+  private async patchGroup(groupId: string, patch: Parameters<typeof updateGroup>[2]): Promise<void> {
+    this.settings = updateGroup(this.settings, groupId, patch);
+    await this.persist();
+  }
+
+  private async moveItem(itemId: string, groupId: string | null, index: number): Promise<void> {
+    this.settings = moveItem(this.settings, itemId, groupId, index);
     await this.persist();
   }
 

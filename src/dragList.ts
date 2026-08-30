@@ -142,3 +142,41 @@ export function resolveDropTarget(
   const sameZone = zone.groupId === fromGroupId;
   return { groupId: zone.groupId, index: adjustForSelfMove(raw, sameZone ? fromIndex : null) };
 }
+
+/**
+ * A drop area on the ribbon itself.
+ *
+ * The ribbon differs from the settings pane in one way that matters: a group
+ * can be collapsed, and a collapsed group draws no buttons. There is then no
+ * gap to aim between, so `itemCenters` says nothing and `count` is what the
+ * index has to be derived from.
+ */
+export interface RibbonZone extends DropZone {
+  collapsed: boolean;
+  /** Buttons the block holds, drawn or not. */
+  count: number;
+}
+
+/**
+ * Resolve a pointer position on the ribbon into "which group, which index".
+ *
+ * Same decision as `resolveDropTarget`, with collapsed groups appending rather
+ * than inserting: dropping onto a closed group means "put it in here", and the
+ * end of the list is the only answer that does not silently reorder buttons the
+ * user cannot currently see.
+ */
+export function resolveRibbonDrop(
+  zones: RibbonZone[],
+  y: number,
+  fromGroupId: string | null,
+  fromIndex: number | null
+): DropTarget | null {
+  const target = resolveDropTarget(zones, y, fromGroupId, fromIndex);
+  if (!target) return null;
+
+  const zone = zones.find((z) => z.groupId === target.groupId);
+  if (!zone || !zone.collapsed) return target;
+
+  const sameZone = zone.groupId === fromGroupId;
+  return { groupId: target.groupId, index: adjustForSelfMove(zone.count, sameZone ? fromIndex : null) };
+}

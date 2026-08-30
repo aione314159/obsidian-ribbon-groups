@@ -12,10 +12,11 @@
  * API. See that file for why.
  */
 
-import { App, PluginSettingTab, Setting, Notice, getIconIds, setIcon } from 'obsidian';
+import { App, PluginSettingTab, Setting, Notice, getIconIds, setIcon, ToggleComponent } from 'obsidian';
 import { addBackupSection } from './backupSettings';
+import { ConfirmModal } from './confirmModal';
 import { addDataDirSetting } from './dataDir';
-import { measureZone, PointerDragController, type ZoneRef } from './dragController';
+import { findScroller, measureZone, PointerDragController, type ZoneRef } from './dragController';
 import { t } from './i18n';
 import {
   createGroup,
@@ -89,6 +90,8 @@ export class RibbonGroupsSettingTab extends PluginSettingTab {
     this.itemSlots = [];
     this.groupListEl = null;
 
+    this.renderHero();
+
     const probe = this.plugin.manager.probe();
     const items = probe.items.filter((i) => i.el);
     const allIds = items.map((i) => i.id);
@@ -101,15 +104,8 @@ export class RibbonGroupsSettingTab extends PluginSettingTab {
     this.renderGeneral(allIds);
     this.renderGroups(items, allIds);
     this.renderUngrouped(items, allIds);
-    addBackupSection(containerEl, {
-      read: () => this.plugin.settings,
-      replace: async (next) => {
-        this.plugin.settings = next;
-        await this.plugin.persist();
-        this.display();
-      },
-    });
-    addDataDirSetting(containerEl, this.app, this.plugin.manifest.id);
+    this.renderBackup();
+    this.renderDataDir();
     this.renderDiagnostics(probe.diagnostics);
   }
 
@@ -117,7 +113,67 @@ export class RibbonGroupsSettingTab extends PluginSettingTab {
     this.drag.cancel();
   }
 
+  /**
+   * Rebuild the pane in place, without losing the reader's position.
+   *
+   * Every change here saves and redraws, and `display()` empties the container
+   * to do it — which resets the scroll to the top. Reordering a button forty
+   * rows down would throw the user back to the first setting every single time,
+   * and the list they were working in is off screen again.
+   *
+   * The scroll container is Obsidian's, not ours, so it is looked up rather
+   * than assumed: the settings pane is a modal on desktop and a full-screen
+   * view on mobile, and the element that scrolls is not the same one.
+   */
+  private redraw(): void {
+    const scroller = this.scroller();
+    const top = scroller?.scrollTop ?? 0;
+    this.display();
+    // The rebuild is synchronous, so the new content is already laid out and a
+    // scrollTop past the new height clamps itself.
+    if (scroller) scroller.scrollTop = top;
+  }
+
+  /**
+   * The element that actually scrolls.
+   *
+   * Measured over CDP on Obsidian 1.13.7: it is `containerEl` itself —
+   * `.vertical-tab-content`, which carries `overflow-y: auto`. Every ancestor
+   * up to `<html>` is `hidden` or `clip`. Walking straight to the parent, the
+   * way an edge-scroll lookup does, finds nothing and the restore is silently a
+   * no-op — the pane still jumps to the top and the fix looks applied.
+   */
+  private scroller(): HTMLElement | null {
+    const el = this.containerEl;
+    const overflow = getComputedStyle(el).overflowY;
+    if (overflow === 'auto' || overflow === 'scroll') return el;
+    return findScroller(el);
+  }
+
   // --- Sections ---
+
+  /** Plugin name, tagline, and running version, above every section card. */
+  private renderHero(): void {
+    const hero = this.containerEl.createDiv({ cls: 'ribbon-groups-hero' });
+    setIcon(hero.createDiv({ cls: 'ribbon-groups-hero-mark' }), 'layout-grid');
+    const text = hero.createDiv();
+    text.createDiv({ cls: 'ribbon-groups-hero-title', text: this.plugin.manifest.name });
+    text.createDiv({
+      cls: 'ribbon-groups-hero-subtitle',
+      text: t.heroSubtitle(this.plugin.manifest.version),
+    });
+  }
+
+  /** One section card: icon + title + subtitle in the head, `Setting` rows attach to the returned body. */
+  private card(icon: string, title: string, subtitle: string): HTMLElement {
+    const section = this.containerEl.createDiv({ cls: 'ribbon-groups-section' });
+    const head = section.createDiv({ cls: 'ribbon-groups-section-head' });
+    setIcon(head.createDiv({ cls: 'ribbon-groups-section-icon' }), icon);
+    const text = head.createDiv();
+    text.createDiv({ cls: 'ribbon-groups-section-title', text: title });
+    text.createDiv({ cls: 'ribbon-groups-section-subtitle', text: subtitle });
+    return section.createDiv({ cls: 'ribbon-groups-section-body' });
+  }
 
   /**
    * When detection fails, do not pretend anything works.
@@ -127,25 +183,25 @@ export class RibbonGroupsSettingTab extends PluginSettingTab {
    * what was detected so the user can paste it into a report.
    */
   private renderProbeFailure(diagnostics: string[]): void {
-    new Setting(this.containerEl).setName(t.ribbonMissingHeading).setHeading();
+    const body = this.card('bug', t.ribbonMissingHeading, t.ribbonMissingSubtitle);
 
-    this.containerEl.createEl('p', { cls: 'ribbon-groups-warning', text: t.ribbonMissingDesc });
+    body.createEl('p', { cls: 'ribbon-groups-warning', text: t.ribbonMissingDesc });
 
-    const pre = this.containerEl.createEl('pre', { cls: 'ribbon-groups-diagnostics' });
+    const pre = body.createEl('pre', { cls: 'ribbon-groups-diagnostics' });
     pre.createEl('code', { text: diagnostics.join('\n') });
 
-    new Setting(this.containerEl).addButton((b) =>
-      b.setButtonText(t.copyDiagnostics).onClick(() => {
-        void navigator.clipboard.writeText(diagnostics.join('\n'));
-        new Notice(t.copied);
-      })
-    );
+    const actions = body.createDiv({ cls: 'ribbon-groups-actions' });
+    const copyBtn = actions.createEl('button', { cls: 'mod-cta', text: t.copyDiagnostics });
+    copyBtn.addEventListener('click', () => {
+      void navigator.clipboard.writeText(diagnostics.join('\n'));
+      new Notice(t.copied);
+    });
   }
 
   private renderGeneral(allIds: string[]): void {
-    new Setting(this.containerEl).setName(t.general).setHeading();
+    const body = this.card('sliders-horizontal', t.general, t.generalSubtitle);
 
-    new Setting(this.containerEl)
+    new Setting(body)
       .setName(t.ungroupedPosition)
       .setDesc(t.ungroupedPositionDesc)
       .addDropdown((d) =>
@@ -156,11 +212,21 @@ export class RibbonGroupsSettingTab extends PluginSettingTab {
           .onChange(async (v) => {
             this.plugin.settings.ungrouped = v === 'top' ? 'top' : 'bottom';
             await this.plugin.persist();
-            this.display();
+            this.redraw();
           })
       );
 
-    new Setting(this.containerEl)
+    new Setting(body)
+      .setName(t.hideUngrouped)
+      .setDesc(t.hideUngroupedDesc)
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.hideUngrouped).onChange(async (v) => {
+          this.plugin.settings.hideUngrouped = v;
+          await this.plugin.persist();
+        })
+      );
+
+    new Setting(body)
       .setName(t.compact)
       .setDesc(t.compactDesc)
       .addToggle((toggle) =>
@@ -172,34 +238,56 @@ export class RibbonGroupsSettingTab extends PluginSettingTab {
 
     const missing = missingIds(this.plugin.settings, allIds);
     if (missing.length > 0) {
-      new Setting(this.containerEl)
+      new Setting(body)
         .setName(t.missingCount(missing.length))
         .setDesc(t.missingDesc)
         .addButton((b) =>
           b.setButtonText(t.clear).onClick(async () => {
             this.plugin.settings = pruneMissing(this.plugin.settings, allIds);
             await this.plugin.persist();
-            this.display();
+            this.redraw();
           })
         );
     }
   }
 
   private renderGroups(items: RibbonItem[], allIds: string[]): void {
-    new Setting(this.containerEl).setName(t.groups).setHeading();
+    const body = this.card('folder-tree', t.groups, t.groupsSubtitle);
 
-    const list = this.containerEl.createDiv({ cls: 'ribbon-groups-list' });
+    const list = body.createDiv({ cls: 'ribbon-groups-list' });
     this.groupListEl = list;
 
     this.plugin.settings.groups.forEach((group) => {
       const card = list.createDiv({ cls: 'ribbon-groups-card' });
       card.dataset.groupId = group.id;
+      // The card wears the group's own colour, so the settings pane previews
+      // what the ribbon will look like instead of describing it. The value is
+      // the same validated literal the ribbon uses; see normalizeSettings().
+      if (group.color) card.style.setProperty('--rg-card-color', group.color);
+      card.toggleClass('has-color', Boolean(group.color));
 
       // The whole card moves, but only the handle starts the gesture — otherwise
       // selecting text in the title field would drag the group.
       const header = card.createDiv({ cls: 'ribbon-groups-card-header' });
       const handle = header.createDiv({ cls: 'ribbon-groups-handle', text: '⠿' });
       handle.setAttribute('aria-label', t.dragToReorder);
+
+      // A toggle rather than a row of its own: whether a group is on the
+      // ribbon belongs next to its name, and the card is already tall. Uses
+      // Obsidian's own ToggleComponent (small variant) so it matches every
+      // other on/off control in this pane instead of a bare native checkbox.
+      const visible = new ToggleComponent(header);
+      // 'mod-small' matches Obsidian's own compact toggle size (--toggle-s-*);
+      // ToggleComponent.setSmall() adds the same class but is not public API.
+      visible.toggleEl.addClass('ribbon-groups-visible', 'mod-small');
+      visible.setTooltip(t.groupVisible);
+      visible.toggleEl.setAttribute('aria-label', t.groupVisible);
+      visible.setValue(!group.hidden);
+      visible.onChange((v) => {
+        card.toggleClass('is-group-hidden', !v);
+        void this.patchGroup(group.id, { hidden: !v });
+      });
+      card.toggleClass('is-group-hidden', group.hidden);
       this.drag.bind(handle, {
         source: card,
         fromGroupId: null,
@@ -229,27 +317,47 @@ export class RibbonGroupsSettingTab extends PluginSettingTab {
       this.itemSlots.push({ el: slot, groupId: group.id });
       this.renderItems(slot, group.id, group.itemIds, items);
 
-      new Setting(card).addButton((b) =>
-        b.setButtonText(t.deleteGroup).onClick(async () => {
-          // The group's buttons go back to the ungrouped area, they do not vanish
-          this.plugin.settings = removeGroup(this.plugin.settings, group.id);
-          await this.plugin.persist();
-          this.display();
-        })
-      );
+      // A plain button, not `new Setting(card).addButton(...)`: a Setting with
+      // no name or description still lays out an empty `.setting-item-info`
+      // column, which silently claims about half the row's width and leaves
+      // the button off-centre in the remainder instead of flush with the edge.
+      const actions = card.createDiv({ cls: 'ribbon-groups-actions' });
+      const deleteBtn = actions.createEl('button', { cls: 'mod-warning', text: t.deleteGroup });
+      deleteBtn.addEventListener('click', () => {
+        // Deleting is the one action here that cannot be undone by repeating
+        // it: colours and order can be put back by hand, a group's membership
+        // list cannot. Everything else in this pane applies immediately with no
+        // prompt, so this is the only dialog and it stays that way.
+        new ConfirmModal(
+          this.app,
+          {
+            title: t.deleteGroupTitle,
+            message: t.deleteGroupConfirm(group.title || t.newGroupName),
+            confirm: t.deleteGroup,
+            cancel: t.cancel,
+          },
+          async () => {
+            // The group's buttons go back to the ungrouped area, they do not vanish
+            this.plugin.settings = removeGroup(this.plugin.settings, group.id);
+            await this.plugin.persist();
+            this.redraw();
+          }
+        ).open();
+      });
     });
 
-    new Setting(this.containerEl).addButton((b) =>
-      b
-        .setButtonText(t.addGroup)
-        .setCta()
-        .onClick(async () => {
-          const seed = `${this.plugin.settings.groups.length}-${allIds.length}-${this.plugin.nextSeed()}`;
-          this.plugin.settings.groups.push(createGroup(t.newGroupName, seed));
-          await this.plugin.persist();
-          this.display();
-        })
-    );
+    // A plain button, not `new Setting(body).addButton(...)`: a Setting with no
+    // name or description still lays out an empty `.setting-item-info` column,
+    // which silently claims about half the row's width (same reasoning as the
+    // delete-button row above, inside the forEach).
+    const actions = body.createDiv({ cls: 'ribbon-groups-actions' });
+    const addBtn = actions.createEl('button', { cls: 'mod-cta', text: t.addGroup });
+    addBtn.addEventListener('click', async () => {
+      const seed = `${this.plugin.settings.groups.length}-${allIds.length}-${this.plugin.nextSeed()}`;
+      this.plugin.settings.groups.push(createGroup(t.newGroupName, seed));
+      await this.plugin.persist();
+      this.redraw();
+    });
   }
 
   /**
@@ -291,6 +399,10 @@ export class RibbonGroupsSettingTab extends PluginSettingTab {
 
   private renderSwatches(parent: HTMLElement, groupId: string, current: string): void {
     const setting = new Setting(parent).setName(t.backgroundColor);
+    // Eight swatches need more than the card's shared control column gives, so
+    // this one row widens it. Without this they wrap onto a second line at the
+    // default pane width, which reads as a layout bug rather than a choice.
+    setting.settingEl.addClass('ribbon-groups-color-row');
     const row = setting.controlEl.createDiv({ cls: 'ribbon-groups-swatches' });
 
     for (const swatch of SWATCHES) {
@@ -302,22 +414,25 @@ export class RibbonGroupsSettingTab extends PluginSettingTab {
       dot.addEventListener('click', async () => {
         this.plugin.settings = updateGroup(this.plugin.settings, groupId, { color: swatch.value });
         await this.plugin.persist();
-        this.display();
+        this.redraw();
       });
     }
   }
 
   private renderUngrouped(items: RibbonItem[], allIds: string[]): void {
-    new Setting(this.containerEl).setName(t.ungrouped).setHeading();
+    const body = this.card('list', t.ungrouped, t.ungroupedSubtitle);
 
     // The filter only touches this list. Groups hold a handful of buttons each,
     // whereas a well-populated vault leaves dozens sitting here. Filtering
     // cannot disturb drag indices either: order in the ungrouped area comes
     // from Obsidian, so moveItem() ignores the index when the target is null.
-    const search = new Setting(this.containerEl);
-    search.settingEl.addClass('ribbon-groups-search');
+    // No name or description is set, so the row is marked stacked: otherwise
+    // the empty info column would still claim its half of the shared control
+    // column and leave the search box narrower than the card.
+    const search = new Setting(body);
+    search.settingEl.addClass('ribbon-groups-search', 'ribbon-groups-stacked');
 
-    const slot = this.containerEl.createDiv({ cls: 'ribbon-groups-slot is-loose' });
+    const slot = body.createDiv({ cls: 'ribbon-groups-slot is-loose' });
     const draw = (): void => this.renderItems(slot, null, ungroupedIds(this.plugin.settings, allIds), items);
 
     search.addSearch((s) =>
@@ -334,9 +449,34 @@ export class RibbonGroupsSettingTab extends PluginSettingTab {
     draw();
   }
 
+  private renderBackup(): void {
+    const body = this.card('save', t.backup, t.backupSubtitle);
+    addBackupSection(body, {
+      read: () => this.plugin.settings,
+      replace: async (next) => {
+        this.plugin.settings = next;
+        await this.plugin.persist();
+        this.redraw();
+      },
+    });
+    // addBackupSection() (src/backupSettings.ts, out of scope for this pane's
+    // own styling) draws its own heading plus one row with two buttons. The
+    // shared control column sized for a single control is too narrow for a
+    // pair of buttons, so that row is marked stacked from the outside instead.
+    body.querySelectorAll<HTMLElement>('.setting-item:not(.setting-item-heading)').forEach((row) => {
+      row.addClass('ribbon-groups-stacked');
+    });
+  }
+
+  private renderDataDir(): void {
+    const body = this.card('hard-drive', t.dataDirName, t.dataDirSubtitle);
+    addDataDirSetting(body, this.app, this.plugin.manifest.id);
+  }
+
   private renderDiagnostics(diagnostics: string[]): void {
-    const details = this.containerEl.createEl('details', { cls: 'ribbon-groups-details' });
-    details.createEl('summary', { text: t.diagnostics });
+    const body = this.card('bug', t.diagnostics, t.diagnosticsSubtitle);
+    const details = body.createEl('details', { cls: 'ribbon-groups-details' });
+    details.createEl('summary', { text: t.diagnosticsToggle });
     const pre = details.createEl('pre', { cls: 'ribbon-groups-diagnostics' });
     pre.createEl('code', { text: diagnostics.join('\n') });
   }
@@ -368,8 +508,25 @@ export class RibbonGroupsSettingTab extends PluginSettingTab {
       row.createSpan({ cls: 'ribbon-groups-item-handle', text: '⠿' });
       row.createSpan({ cls: 'ribbon-groups-item-title', text: item?.title ?? id });
 
-      // The whole row is the handle. There is nothing else in it to interact
-      // with, and a small grip is hard to hit on a touch screen.
+      // A dropdown next to the drag handle, because dragging is not always the
+      // easier gesture: with a dozen groups the target may be off screen, and a
+      // list of names is faster than a drag that has to auto-scroll to get
+      // there. Both write the same setting.
+      const picker = row.createEl('select', { cls: 'dropdown ribbon-groups-item-group' });
+      picker.setAttribute('aria-label', t.moveToGroup);
+      picker.title = t.moveToGroup;
+      for (const g of this.plugin.settings.groups) {
+        picker.createEl('option', { value: g.id, text: g.title || t.newGroupName });
+      }
+      picker.createEl('option', { value: '', text: t.ungrouped });
+      picker.value = groupId ?? '';
+      // The row itself starts a drag on pointerdown; without this, opening the
+      // dropdown would be read as the beginning of one.
+      picker.addEventListener('pointerdown', (e) => e.stopPropagation());
+      picker.addEventListener('change', () => void this.moveItemToGroup(id, picker.value || null));
+
+      // The rest of the row is the handle. A small grip is hard to hit on a
+      // touch screen, so everything but the dropdown starts the drag.
       this.drag.bind(row, {
         source: row,
         fromGroupId: groupId,
@@ -399,16 +556,31 @@ export class RibbonGroupsSettingTab extends PluginSettingTab {
     return [measureZone(list, null, Array.from(list.querySelectorAll<HTMLElement>(CARD_SELECTOR)))];
   }
 
+  /**
+   * Move a button to a group by name rather than by dragging.
+   *
+   * It lands at the end of the target group: the dropdown says which group, and
+   * nothing about where inside it, so appending is the only answer that does
+   * not invent a position the user did not choose. Reordering within a group is
+   * what the drag is for.
+   */
+  private async moveItemToGroup(itemId: string, groupId: string | null): Promise<void> {
+    const target = this.plugin.settings.groups.find((g) => g.id === groupId);
+    this.plugin.settings = moveItem(this.plugin.settings, itemId, groupId, target ? target.itemIds.length : 0);
+    await this.plugin.persist();
+    this.redraw();
+  }
+
   private async commitItemMove(itemId: string, target: DropTarget): Promise<void> {
     this.plugin.settings = moveItem(this.plugin.settings, itemId, target.groupId, target.index);
     await this.plugin.persist();
-    this.display();
+    this.redraw();
   }
 
   private async commitGroupMove(groupId: string, target: DropTarget): Promise<void> {
     this.plugin.settings = moveGroup(this.plugin.settings, groupId, target.index);
     await this.plugin.persist();
-    this.display();
+    this.redraw();
   }
 
   /** Patch one group and reapply, without redrawing the pane. */

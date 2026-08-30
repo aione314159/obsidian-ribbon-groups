@@ -37,12 +37,15 @@ function openFolder(dir: string): void {
 
 /**
  * Add the "storage location" row to the settings pane.
+ *
  * The path sits in the description where it can be selected and copied; the
- * open button is on the right.
+ * open button is on the right. The row is deliberately unnamed: it is drawn
+ * inside a card whose head already says "Storage location", and repeating that
+ * one line below reads as a rendering bug rather than a label.
  */
 export function addDataDirSetting(containerEl: HTMLElement, app: App, pluginId: string): void {
   const dir = pluginDataDir(app, pluginId);
-  const setting = new Setting(containerEl).setName(t.dataDirName);
+  const setting = new Setting(containerEl);
 
   if (!dir) {
     setting.setDesc(t.dataDirUnavailable);

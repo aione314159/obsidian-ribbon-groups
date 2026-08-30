@@ -19,7 +19,9 @@ import {
   pruneMissing,
   removeGroup,
   serializeSettings,
+  hiddenIds,
   setAllCollapsed,
+  titleLabel,
   ungroupedIds,
   updateGroup,
 } from '../src/groupLayout';
@@ -32,6 +34,7 @@ const group = (id: string, itemIds: string[], over: Partial<RibbonGroup> = {}): 
   icon: '',
   showTitle: true,
   collapsed: false,
+  hidden: false,
   itemIds,
   ...over,
 });
@@ -259,5 +262,79 @@ describe('matchesQuery', () => {
 describe('createGroup', () => {
   it('gives different seeds different ids', () => {
     expect(createGroup('n', '1').id).not.toBe(createGroup('n', '2').id);
+  });
+});
+
+describe('titleLabel', () => {
+  it('leaves a title that fits untouched', () => {
+    expect(titleLabel('CEK')).toBe('CEK');
+    expect(titleLabel('WORKS')).toBe('WORKS');
+  });
+
+  it('cuts a longer title to five glyphs, the last being an ellipsis', () => {
+    expect(titleLabel('DPTEST')).toBe('DPTE\u2026');
+    expect(Array.from(titleLabel('a very long group name'))).toHaveLength(5);
+  });
+
+  it('trims surrounding whitespace before counting', () => {
+    expect(titleLabel('  LT  ')).toBe('LT');
+  });
+
+  // Slicing by UTF-16 unit would split the pair and render a replacement box
+  it('counts code points, not UTF-16 units', () => {
+    expect(titleLabel('\u{1F4C1}\u{1F4C2}\u{1F4C3}')).toBe('\u{1F4C1}\u{1F4C2}\u{1F4C3}');
+    expect(titleLabel('\u{1F4C1}\u{1F4C2}\u{1F4C3}\u{1F4C4}\u{1F4C5}\u{1F4C6}')).toBe(
+      '\u{1F4C1}\u{1F4C2}\u{1F4C3}\u{1F4C4}\u2026'
+    );
+  });
+});
+
+describe('hiding', () => {
+  const all = ['a', 'b', 'c', 'd'];
+
+  it('marks a hidden group as hidden but keeps its buttons in the block', () => {
+    const s = settings([group('g1', ['a', 'b'], { hidden: true })]);
+    const blocks = layout(s, all);
+    expect(blocks[0]).toMatchObject({ kind: 'group', hidden: true, itemIds: ['a', 'b'] });
+  });
+
+  // Dropping the block would strand its buttons in Obsidian's own container
+  it('never drops a hidden block from the layout', () => {
+    const s = settings([group('g1', ['a'], { hidden: true })], { hideUngrouped: true });
+    expect(layout(s, all)).toHaveLength(2);
+  });
+
+  it('marks the ungrouped block hidden when the setting is on', () => {
+    const s = settings([group('g1', ['a'])], { hideUngrouped: true });
+    const loose = layout(s, all).find((b) => b.kind === 'ungrouped');
+    expect(loose).toMatchObject({ hidden: true, itemIds: ['b', 'c', 'd'] });
+  });
+
+  it('leaves the ungrouped block visible by default', () => {
+    const s = settings([group('g1', ['a'])]);
+    expect(layout(s, all).find((b) => b.kind === 'ungrouped')).toMatchObject({ hidden: false });
+  });
+
+  it('reports every button the ribbon will not show', () => {
+    const s = settings([group('g1', ['a', 'b'], { hidden: true }), group('g2', ['c'])], {
+      hideUngrouped: true,
+    });
+    expect(hiddenIds(s, all).sort()).toEqual(['a', 'b', 'd']);
+  });
+
+  it('reads both flags out of stored settings, defaulting to visible', () => {
+    const loaded = normalizeSettings({
+      groups: [{ id: 'g1', itemIds: ['a'], hidden: true }, { id: 'g2', itemIds: ['b'] }],
+      hideUngrouped: true,
+    });
+    expect(loaded.groups.map((g) => g.hidden)).toEqual([true, false]);
+    expect(loaded.hideUngrouped).toBe(true);
+    expect(normalizeSettings({}).hideUngrouped).toBe(false);
+  });
+
+  // Anything but a literal true has to mean visible, or a truthy string hides a group
+  it('only accepts a real boolean true as hidden', () => {
+    const loaded = normalizeSettings({ groups: [{ id: 'g1', itemIds: [], hidden: 'yes' }] });
+    expect(loaded.groups[0].hidden).toBe(false);
   });
 });

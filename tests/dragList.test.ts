@@ -4,8 +4,10 @@ import {
   adjustForSelfMove,
   insertIndexFor,
   resolveDropTarget,
+  resolveRibbonDrop,
   resolveZone,
   type DropZone,
+  type RibbonZone,
 } from '../src/dragList';
 
 describe('insertIndexFor', () => {
@@ -104,5 +106,50 @@ describe('resolveDropTarget', () => {
 
   it('reports no target when the pointer is released far from every zone', () => {
     expect(resolveDropTarget(zones, 1000, 'a', 0)).toBe(null);
+  });
+});
+
+describe('resolveRibbonDrop', () => {
+  const zone = (
+    groupId: string | null,
+    top: number,
+    bottom: number,
+    over: Partial<RibbonZone> = {}
+  ): RibbonZone => ({
+    groupId,
+    rect: { top, bottom, left: 0, right: 44 },
+    itemCenters: [],
+    collapsed: false,
+    count: 0,
+    ...over,
+  });
+
+  const open = zone('a', 0, 100, { itemCenters: [20, 60], count: 2 });
+  const shut = zone('b', 100, 140, { collapsed: true, count: 3 });
+  const loose = zone(null, 140, 240, { itemCenters: [160, 200], count: 2 });
+
+  it('behaves like the settings pane for an expanded group', () => {
+    expect(resolveRibbonDrop([open, shut, loose], 10, null, null)).toEqual({ groupId: 'a', index: 0 });
+    expect(resolveRibbonDrop([open, shut, loose], 90, null, null)).toEqual({ groupId: 'a', index: 2 });
+  });
+
+  // A closed group shows no buttons, so there is no gap to aim between
+  it('appends into a collapsed group wherever it is dropped', () => {
+    expect(resolveRibbonDrop([open, shut, loose], 105, null, null)).toEqual({ groupId: 'b', index: 3 });
+    expect(resolveRibbonDrop([open, shut, loose], 135, null, null)).toEqual({ groupId: 'b', index: 3 });
+  });
+
+  // The source is removed before the insert, so the append index moves back one
+  it('accounts for the source when appending within the same collapsed group', () => {
+    expect(resolveRibbonDrop([open, shut, loose], 120, 'b', 0)).toEqual({ groupId: 'b', index: 2 });
+  });
+
+  it('resolves the ungrouped block, which is what dragging out of a group lands on', () => {
+    expect(resolveRibbonDrop([open, shut, loose], 150, 'a', null)).toEqual({ groupId: null, index: 0 });
+    expect(resolveRibbonDrop([open, shut, loose], 230, 'a', null)).toEqual({ groupId: null, index: 2 });
+  });
+
+  it('cancels when the pointer is released well away from every block', () => {
+    expect(resolveRibbonDrop([open, shut, loose], 240 + ZONE_SNAP_PX + 1, 'a', null)).toBeNull();
   });
 });

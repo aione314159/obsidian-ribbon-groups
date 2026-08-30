@@ -37,6 +37,30 @@ const ICON_NAME_PATTERN = /^[a-z0-9-]{1,64}$/;
 const COLOR_PATTERN =
   /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%/]+\)|hsla?\([\d\s.,%/deg]+\)|[a-z]{3,20})$/i;
 
+/**
+ * How many characters of a group title the ribbon can show.
+ *
+ * The ribbon is 44px wide and its padding leaves a label roughly 24px. Five
+ * characters is what fits once the font size is allowed to shrink (see
+ * `fitTitle()` in `ribbonManager.ts`); beyond that the text has to be cut, and
+ * a silent cut reads as a wrong title rather than a shortened one, so the last
+ * character makes way for an ellipsis.
+ */
+export const TITLE_MAX_CHARS = 5;
+
+/**
+ * The label actually drawn on the ribbon for a group title.
+ *
+ * Counting is done over code points, not UTF-16 units: an emoji or a character
+ * outside the basic plane is one glyph on screen but two units in a string, and
+ * slicing by unit would cut it in half and render a replacement box.
+ */
+export function titleLabel(title: string): string {
+  const chars = Array.from(title.trim());
+  if (chars.length <= TITLE_MAX_CHARS) return chars.join('');
+  return `${chars.slice(0, TITLE_MAX_CHARS - 1).join('')}…`;
+}
+
 /** Create a new group. The seed keeps ids unique within one session. */
 export function createGroup(title: string, seed: string): RibbonGroup {
   return {
@@ -46,6 +70,7 @@ export function createGroup(title: string, seed: string): RibbonGroup {
     icon: '',
     showTitle: true,
     collapsed: false,
+    hidden: false,
     itemIds: [],
   };
 }
@@ -88,6 +113,7 @@ export function normalizeSettings(raw: unknown): RibbonGroupsSettings {
       icon: typeof g.icon === 'string' && ICON_NAME_PATTERN.test(g.icon) ? g.icon : '',
       showTitle: g.showTitle !== false,
       collapsed: g.collapsed === true,
+      hidden: g.hidden === true,
       itemIds,
     });
   }
@@ -96,6 +122,7 @@ export function normalizeSettings(raw: unknown): RibbonGroupsSettings {
     groups,
     ungrouped: input.ungrouped === 'top' ? 'top' : DEFAULT_SETTINGS.ungrouped,
     keepMissing: input.keepMissing !== false,
+    hideUngrouped: input.hideUngrouped === true,
     compact: input.compact === true,
   };
 }
@@ -143,16 +170,24 @@ export function layout(settings: RibbonGroupsSettings, allIds: string[]): Layout
     kind: 'group' as const,
     group,
     itemIds: group.itemIds.filter((id) => present.has(id)),
+    hidden: group.hidden,
   }));
 
   const loose = ungroupedIds(settings, allIds);
   if (loose.length > 0) {
-    const block: LayoutBlock = { kind: 'ungrouped', itemIds: loose };
+    const block: LayoutBlock = { kind: 'ungrouped', itemIds: loose, hidden: settings.hideUngrouped };
     if (settings.ungrouped === 'top') blocks.unshift(block);
     else blocks.push(block);
   }
 
   return blocks;
+}
+
+/** Buttons the ribbon will not show, because their block is hidden. */
+export function hiddenIds(settings: RibbonGroupsSettings, allIds: string[]): string[] {
+  return layout(settings, allIds)
+    .filter((b) => b.hidden)
+    .flatMap((b) => b.itemIds);
 }
 
 /**

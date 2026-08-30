@@ -30,8 +30,14 @@
   --rg-gap-lg: 4px;
 }
 
+/*
+ * The side margin is 3px, not 4px, and that is not a rounding choice. The
+ * ribbon gives the whole column 36px; every pixel taken here comes straight off
+ * the group label, which has to fit five characters. Measured over CDP: at 4px
+ * a side the widest five-glyph label does not fit even at the 6px floor.
+ */
 .ribbon-groups-group.is-group.has-color {
-  margin: var(--rg-gap-xs) var(--rg-gap-sm);
+  margin: var(--rg-gap-xs) 3px;
   padding: var(--rg-gap-xs) 0 var(--rg-gap-sm);
   border-radius: var(--radius-m, 6px);
   background: var(--rg-color);
@@ -51,12 +57,18 @@
   width: 100%;
 }
 
-/* The ribbon is about 42px wide: a title fits two or three characters, then clips */
+/*
+ * The ribbon is 44px wide with 4px of padding a side, so a label has roughly
+ * 24px to work with. At the base size that is under four characters, which is
+ * why the size is a variable: `fitTitle()` in ribbonManager.ts measures the
+ * rendered label and steps this down until it stops clipping.
+ */
 .ribbon-groups-title {
   max-width: 100%;
-  padding: 0 var(--rg-gap-xs) var(--rg-gap-xs);
+  /* No side padding: the text is centred anyway, and 4px here is a whole glyph */
+  padding: 0 0 var(--rg-gap-xs);
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--rg-title-size, 9px);
   line-height: 1.2;
   text-align: center;
   white-space: nowrap;
@@ -93,14 +105,89 @@
   display: none;
 }
 
-/* A collapsed group needs a mark, or the blank space reads as nothing being there */
+/*
+ * A collapsed group needs a mark, or the blank space reads as nothing being there.
+ *
+ * `display: block` puts the mark on its own line, and that is the whole point:
+ * inline, it joins the label's text run, so `fitTitle()` shrinks label and mark
+ * together until the pair fills the box edge to edge. Measured over CDP with
+ * the label "OPEN": inline, the text sat 0.39px from the left edge and 6.83px
+ * from the right — the arrow glyph is narrower than its advance, so the
+ * padding looked to have vanished on one side only. On its own line the label
+ * is centred on its own and keeps the 2.31px it has when expanded.
+ */
 .ribbon-groups-group.is-collapsed .ribbon-groups-title::after {
-  content: ' ▸';
+  content: '▸';
+  display: block;
+  line-height: 1;
   opacity: 0.7;
 }
 
 .ribbon-groups-group.is-collapsed .ribbon-groups-icon {
   opacity: 0.6;
+}
+
+/*
+ * A hidden block keeps its buttons — it just does not draw them. Removing the
+ * block instead would leave those buttons loose in Obsidian's own container
+ * with nothing owning them, and restore would have no record of where they were.
+ */
+.ribbon-groups-group.is-hidden {
+  display: none;
+}
+
+/* --- Dragging on the ribbon --- */
+
+/*
+ * The ribbon column does not scroll (`.workspace-ribbon` is `overflow: hidden`),
+ * so nothing is lost by telling the browser not to interpret a press on a
+ * grouped button as a pan. Without it a touch drag never reaches us.
+ */
+.ribbon-groups-items > .side-dock-ribbon-action {
+  touch-action: none;
+}
+
+.ribbon-groups-is-dragging {
+  cursor: grabbing;
+}
+
+/* The button being carried. Faded rather than hidden, so its origin stays readable */
+.side-dock-ribbon-action.is-rg-dragging {
+  opacity: 0.35;
+}
+
+/*
+ * The block the release would land in.
+ *
+ * An outline rather than a border: a border would add width and shift every
+ * button inside the block by a pixel the moment the highlight appears.
+ */
+.ribbon-groups-group.is-rg-drop {
+  border-radius: var(--radius-m, 6px);
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -1px;
+}
+
+/*
+ * Where the button will be inserted. `align-self: stretch` is required: the
+ * items column centres its children, and a bare 2px div would centre to nothing.
+ */
+.ribbon-groups-ribbon-line {
+  align-self: stretch;
+  height: 2px;
+  margin: -1px 0;
+  border-radius: 1px;
+  background: var(--interactive-accent);
+  pointer-events: none;
+}
+
+/* Only on screen while a drag is running, as somewhere to drop a button out of its group */
+.ribbon-groups-group.ribbon-groups-placeholder {
+  justify-content: center;
+  min-height: 20px;
+  margin: var(--rg-gap-sm) var(--rg-gap-sm) 0;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: var(--radius-m, 6px);
 }
 
 /* --- Settings pane --- */
@@ -123,10 +210,166 @@
   --rg-gap-md: 12px;
   --rg-gap-lg: 16px;
 
+  /* The one horizontal inset every section-level row lines up against; see
+   * the section-card block below for why it lives on the row, not the card. */
+  --rg-gutter: var(--rg-gap-lg);
+
   --setting-items-background: transparent;
   --setting-items-radius: 0;
   --setting-items-border-width: 0;
 }
+
+/* ============================================================
+ * Section cards (general / groups / ungrouped / backup / storage
+ * location / diagnostics). Colours and radii all come from Obsidian's
+ * own theme variables, the same way the ribbon-side rules above do —
+ * no custom palette is introduced, so a group's card (below) keeps
+ * exactly the look it already had.
+ * ============================================================ */
+
+.ribbon-groups-settings .ribbon-groups-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--rg-gap-lg);
+  padding: var(--rg-gap-xs) var(--rg-gap-xs) var(--rg-gap-lg);
+}
+
+.ribbon-groups-settings .ribbon-groups-hero-mark {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+  color: var(--interactive-accent);
+}
+
+.ribbon-groups-settings .ribbon-groups-hero-mark .svg-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.ribbon-groups-settings .ribbon-groups-hero-title {
+  font-size: var(--font-ui-large);
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.ribbon-groups-settings .ribbon-groups-hero-subtitle {
+  margin-top: 2px;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
+.ribbon-groups-settings .ribbon-groups-section {
+  margin-bottom: var(--rg-gap-lg);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-l, 12px);
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s, 0 1px 2px rgba(0, 0, 0, 0.08));
+  overflow: hidden;
+}
+
+.ribbon-groups-settings .ribbon-groups-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--rg-gap-md);
+  padding: var(--rg-gap-md) var(--rg-gutter);
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ribbon-groups-settings .ribbon-groups-section-icon {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+  color: var(--interactive-accent);
+}
+
+.ribbon-groups-settings .ribbon-groups-section-icon .svg-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.ribbon-groups-settings .ribbon-groups-section-title {
+  font-size: var(--font-ui-medium);
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.ribbon-groups-settings .ribbon-groups-section-subtitle {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+/* Container queries below scope to the card's own width, the same reasoning
+ * as the per-group card further down this file. */
+.ribbon-groups-settings .ribbon-groups-section-body {
+  container-type: inline-size;
+}
+
+/*
+ * The body itself carries no horizontal padding — every direct child that
+ * reads as a "row" supplies its own gutter and a divider on top of it
+ * instead, so the section head's own border and every row's border-top land
+ * on the same left and right edge. A padded body plus padded rows draws two
+ * different line lengths (card-edge to card-edge for the head, inset for
+ * each row), which is the single most common way this kind of pane ends up
+ * looking "almost" aligned. The first row has nothing above it to divide from.
+ */
+.ribbon-groups-settings .ribbon-groups-section-body > .setting-item,
+.ribbon-groups-settings .ribbon-groups-section-body > .ribbon-groups-list,
+.ribbon-groups-settings .ribbon-groups-section-body > .ribbon-groups-actions,
+.ribbon-groups-settings .ribbon-groups-section-body > .ribbon-groups-warning,
+.ribbon-groups-settings .ribbon-groups-section-body > .ribbon-groups-details {
+  margin: 0;
+  padding: var(--rg-gap-md) var(--rg-gutter);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+/*
+ * Elements that already draw their own box (a textarea, a code block, a
+ * dashed drop zone): the box's own border/background stays flush with every
+ * other row's left and right edge — zero horizontal margin, same as
+ * `.setting-item` above — and the gutter becomes left/right padding instead,
+ * so the box lines up with the rest of the card while its content still
+ * sits inset from the card edge. A horizontal margin here would have pushed
+ * a `width: 100%` textarea past the card's own right edge by exactly the
+ * margin, since a `width` set to a percentage is not shrunk for its own
+ * margin the way `width: auto` is — see `.ribbon-groups-backup-box` below.
+ */
+/*
+ * These rows inset by margin, not padding.
+ *
+ * All three draw something of their own — a border, a dashed outline, a code
+ * background — and padding would inset only the content while that border still
+ * ran the full width of the card, which is what makes a row look like it is
+ * spilling out of it. The textarea cannot take a margin (see
+ * `.ribbon-groups-backup-row`), so it is wrapped and the wrapper takes it.
+ */
+.ribbon-groups-settings .ribbon-groups-section-body > .ribbon-groups-backup-row,
+.ribbon-groups-settings .ribbon-groups-section-body > .ribbon-groups-diagnostics,
+.ribbon-groups-settings .ribbon-groups-section-body > .ribbon-groups-slot.is-loose {
+  margin: var(--rg-gap-md) var(--rg-gutter) 0;
+}
+
+.ribbon-groups-settings .ribbon-groups-section-body > *:first-child {
+  border-top: none;
+  margin-top: 0;
+}
+
+/*
+ * `.ribbon-groups-actions` (defined further down, shared with the per-group
+ * delete-button row) already gives this a right-aligned flex row; only the
+ * section-body row rule above adds the gutter and divider when it sits here.
+ */
 
 /*
  * One value drives the spacing between rows inside a card. Let each row set its
@@ -160,17 +403,146 @@
   margin-bottom: 0;
 }
 
+/* The delete button, right-aligned. A plain div, not a Setting with no name
+ * or description: an empty .setting-item-info would still claim its share of
+ * the row and leave the button off-centre in what remained. */
 /*
- * The last row of a card is the delete button and nothing else. Clearing its
- * padding lets the button sit flush with the card's inner edge; the background
- * and border are already off via the variables above.
+ * The confirm dialog. The Setting row it uses already right-aligns its buttons,
+ * so all this does is take back the padding a Setting adds inside a modal and
+ * keep the message from running edge to edge.
  */
-.ribbon-groups-card > .setting-item:last-child {
+.ribbon-groups-confirm p {
+  margin: 0 0 var(--rg-gap-md);
+  color: var(--text-muted);
+}
+
+.ribbon-groups-confirm .ribbon-groups-confirm-actions {
   padding: 0;
+  border-top: none;
+}
+
+.ribbon-groups-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/*
+ * The card carries the group's own colour, so picking a swatch shows what the
+ * ribbon will look like rather than describing it.
+ *
+ * A gradient rather than `background`, because the swatches are translucent
+ * rgba values meant to sit over a surface. Setting them as the background
+ * outright would let the settings window show through; layering an image over
+ * the card's own colour composites them exactly the way the ribbon does.
+ */
+.ribbon-groups-card.has-color {
+  background-image: linear-gradient(var(--rg-card-color), var(--rg-card-color));
 }
 
 .ribbon-groups-card.is-dragging {
   opacity: 0.5;
+}
+
+/*
+ * A group switched off is still fully editable, so it stays legible rather
+ * than being greyed out to the point of looking disabled. The dashed border is
+ * the signal: this one is not on the ribbon right now.
+ */
+.ribbon-groups-card.is-group-hidden {
+  border-style: dashed;
+  background: transparent;
+  /* Off means off: a hidden group keeps its swatch but stops wearing it */
+  background-image: none;
+}
+
+.ribbon-groups-card.is-group-hidden .ribbon-groups-title-input {
+  color: var(--text-muted);
+}
+
+/* Sized and coloured entirely by Obsidian's own .checkbox-container + mod-small
+ * rules (see settingsTab.ts) — it only needs to hold its place in the header row. */
+.ribbon-groups-visible {
+  flex-shrink: 0;
+}
+
+/*
+ * `.setting-item-info` and `.setting-item-control` are both `flex: 1 1 auto`
+ * in app.css, so a row with a longer description squeezes its control
+ * narrower than the row above it — same edges, uneven inner content, which
+ * only shows up when you measure the control and the field inside it, not
+ * the row. Each card has exactly one control shape to match (the icon field,
+ * the swatches, the show-title toggle), so give every row the same fixed
+ * control column instead of letting description length decide it.
+ */
+.ribbon-groups-settings {
+  --rg-control-col: min(11rem, 45%);
+}
+
+.ribbon-groups-card .setting-item:not(.setting-item-heading),
+.ribbon-groups-section-body .setting-item:not(.setting-item-heading) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rg-control-col);
+  column-gap: var(--rg-gap-md);
+  align-items: center;
+}
+
+.ribbon-groups-card .setting-item-control,
+.ribbon-groups-section-body .setting-item-control {
+  min-width: 0;
+}
+
+/*
+ * A section-level row that is not really a labelled setting (a lone search
+ * box, a description followed by a pair of buttons): an empty
+ * `.setting-item-info` would still claim half the shared control column and
+ * leave the real control narrower than the card. Marking the row stacked
+ * switches it to a single column, control below info, and this rule has to
+ * follow the grid rule above with equal specificity to win the tie.
+ */
+.ribbon-groups-section-body .setting-item.ribbon-groups-stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ribbon-groups-section-body .setting-item.ribbon-groups-stacked .setting-item-info:empty {
+  display: none;
+}
+
+.ribbon-groups-section-body .setting-item.ribbon-groups-stacked .setting-item-control {
+  width: 100%;
+}
+
+/* The icon field sits next to a fixed-size preview glyph, so it grows into
+ * the remaining space rather than claiming the full track (`width: 100%`
+ * would fight the preview for room). */
+.ribbon-groups-card .setting-item-control input[type='text'] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/*
+ * Container queries scope to the card, not the viewport: it is the card that
+ * narrows first when the sidebar is docked, not the window. Threshold and
+ * exclusion copied from app.css's own `@container (max-width: 340px)` rule —
+ * `.setting-item` switching to grid here means that rule's `flex-direction`
+ * no longer applies, so it has to be restated in grid terms rather than
+ * picking a different breakpoint.
+ */
+.ribbon-groups-card {
+  container-type: inline-size;
+}
+
+@container (max-width: 340px) {
+  .ribbon-groups-card .setting-item:not(.mod-toggle):not(.setting-item-heading),
+  .ribbon-groups-section-body .setting-item:not(.mod-toggle):not(.setting-item-heading) {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .ribbon-groups-card .setting-item:not(.mod-toggle):not(.setting-item-heading) .setting-item-control,
+  .ribbon-groups-section-body .setting-item:not(.mod-toggle):not(.setting-item-heading) .setting-item-control {
+    justify-content: flex-start;
+    margin-top: var(--rg-gap-xs);
+  }
 }
 
 .ribbon-groups-card-header {
@@ -211,17 +583,45 @@
   pointer-events: none;
 }
 
-/* Eight swatches do not fit one row in a narrow pane */
+/*
+ * Eight swatches do not fit one row in a narrow pane, so they wrap.
+ * `flex: 1 1 auto` fills the fixed control column the same way the text
+ * input does (see the grid rules above) — without it, the row's own box
+ * shrinks to the wrapped dots' content width and stops meeting the track's
+ * far edge once the card is narrow enough to left-align instead of right.
+ */
+/*
+ * The colour row gets a wider control column than its siblings.
+ *
+ * Measured over CDP: the shared column leaves the swatch row 165px, and eight
+ * 18px swatches with 4px gaps need 172px — so they wrapped at the default pane
+ * width, which reads as a layout bug rather than a choice. 12rem gives enough
+ * and keeps the wrap for the narrow widths it was written for. Widening the
+ * shared column instead would squeeze every other row's description for the
+ * benefit of this one.
+ */
+.ribbon-groups-card .setting-item.ribbon-groups-color-row {
+  --rg-control-col: min(12rem, 60%);
+}
+
 .ribbon-groups-swatches {
   display: flex;
+  flex: 1 1 auto;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--rg-gap-xs);
 }
 
+/*
+ * 18px, not 20px, and that is arithmetic rather than taste. The control column
+ * is `min(11rem, 45%)` = 176px at the default width; eight 20px swatches with
+ * 4px gaps need 188px and wrap onto a second row before the pane is anywhere
+ * near narrow. At 18px the row needs 172px and stays on one line, leaving the
+ * wrap for the narrow widths it was written for.
+ */
 .ribbon-groups-swatch {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border: 1px solid var(--background-modifier-border);
   border-radius: 50%;
   cursor: pointer;
@@ -269,15 +669,6 @@
   border-radius: var(--radius-m, 6px);
 }
 
-/* The ungrouped list sits outside any card, so it spaces itself off the heading */
-.ribbon-groups-slot.is-loose {
-  margin-top: var(--rg-gap-sm);
-}
-
-.ribbon-groups-search {
-  padding-top: 0;
-}
-
 .ribbon-groups-search .search-input-container {
   width: 100%;
 }
@@ -298,6 +689,22 @@
   opacity: 0.5;
 }
 
+/*
+ * The dropdown keeps its own width rather than stretching: the row is a title
+ * that can be any length and one control, and a select that grows with the
+ * pane leaves the two ends of the list disagreeing about where "the control"
+ * starts. `touch-action: auto` puts back what `.ribbon-groups-item` takes away
+ * for dragging — without it the native picker cannot be scrolled by finger.
+ */
+.ribbon-groups-item-group {
+  flex-shrink: 0;
+  max-width: 40%;
+  margin-left: auto;
+  font-size: var(--font-ui-smaller);
+  touch-action: auto;
+  cursor: pointer;
+}
+
 .ribbon-groups-item-title {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -311,20 +718,37 @@
   text-align: center;
 }
 
+/*
+ * The horizontal gutter comes from the section-body row rule above, as
+ * left/right padding rather than margin — see that rule for why. `width:
+ * 100%` is still needed here despite the padding already living on this
+ * element: a `<textarea>` is a replaced element, so `width: auto` resolves
+ * to its `cols` attribute (about 194px) rather than filling the row the way
+ * an ordinary block box would. Obsidian's base stylesheet already puts every
+ * element on `box-sizing: border-box`, so this 100% and the padding do not
+ * add on top of each other the way they would with `content-box`.
+ */
 .ribbon-groups-backup-box {
+  display: block;
   width: 100%;
-  margin-top: var(--rg-gap-sm);
   font-family: var(--font-monospace);
   font-size: var(--font-ui-smaller);
   resize: vertical;
 }
 
+/* margin comes from the section-body row rules above */
 .ribbon-groups-warning {
-  margin: 0 0 var(--rg-gap-md);
   color: var(--text-error);
 }
 
+/*
+ * Two contexts: a direct child of a section body (the probe-failure card,
+ * where the row rules above set its margin) or nested inside
+ * `.ribbon-groups-details` (the diagnostics card), where this margin-top is
+ * what separates it from the summary line above it.
+ */
 .ribbon-groups-diagnostics {
+  margin-top: var(--rg-gap-sm);
   max-height: 220px;
   overflow: auto;
   padding: var(--rg-gap-sm);
@@ -335,8 +759,8 @@
   white-space: pre-wrap;
 }
 
+/* margin comes from the section-body row rules above */
 .ribbon-groups-details {
-  margin-top: var(--rg-gap-lg);
   color: var(--text-muted);
 }
 
